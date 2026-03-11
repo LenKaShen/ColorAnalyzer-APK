@@ -35,7 +35,7 @@ jobs:
             ccache
 
       - name: Install buildozer + cython
-        run: pip3 install --user --upgrade cython buildozer
+        run: pip3 install --user --upgrade "cython<3" buildozer
 
       - name: Build APK
         env:

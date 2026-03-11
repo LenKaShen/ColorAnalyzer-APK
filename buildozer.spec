@@ -5,7 +5,7 @@ package.domain = org.local
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,kv,atlas,txt
 version = 1.0.0
-requirements = python3,kivy,plyer,numpy,opencv-python-headless
+requirements = python3,kivy,plyer,numpy,opencv-python-headless,pyjnius==1.6.1
 orientation = portrait
 fullscreen = 0
 android.permissions = READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE

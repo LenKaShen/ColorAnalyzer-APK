@@ -39,6 +39,24 @@ buildozer android debug
 
 APK output will be in `bin/`.
 
+## GitHub Actions build (recommended)
+
+If you are building with the workflow in `.github/workflows/build-apk.yml`, this repo now pins:
+
+- `pyjnius==1.6.1` in `buildozer.spec`
+- `cython<3` in the workflow install step
+
+This avoids the old Python 2-style `long` symbol build failures in `jnius_utils.pxi`.
+
+If a previous failed cache is reused, do this once:
+
+1. In GitHub, open `Actions`.
+2. Open your workflow run list.
+3. Delete Buildozer caches for this repo (or bump cache keys).
+4. Re-run workflow from latest commit.
+
+Tip: changing `buildozer.spec` or `requirements.txt` also invalidates the local cache key used by the workflow.
+
 ## Install on phone
 
 1. Enable USB debugging on Android.
