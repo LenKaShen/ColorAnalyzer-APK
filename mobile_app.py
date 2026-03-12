@@ -3,6 +3,7 @@ import threading
 import traceback
 from functools import partial
 from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 from kivy.app import App
 from kivy.clock import Clock
@@ -247,7 +248,8 @@ class ColorAnalyzerMobileApp(App):
 
             mode_by_role: Dict[str, str] = {}
             video_by_role: Dict[str, str] = {}
-            image_pair_by_role: Dict[str, tuple[str, str]] = {}
+            start_time_by_role: Dict[str, float] = {}
+            image_pair_by_role: Dict[str, Tuple[str, str]] = {}
 
             for role, panel in self.role_panels.items():
                 has_video = bool(panel.video_path)
@@ -258,25 +260,24 @@ class ColorAnalyzerMobileApp(App):
                         f"Choose one input type for {role}: video or frame images, not both"
                     )
                 if has_video:
-                    mode_by_role[role] = "video"
+                    input_modes_role = "video"
                     video_by_role[role] = panel.video_path
+                    start_time_by_role[role] = 0.0
                 elif has_images:
-                    mode_by_role[role] = "images"
+                    input_modes_role = "images"
                     image_pair_by_role[role] = (panel.image_start_path, panel.image_end_path)
                 else:
                     raise ValueError(
                         f"Select either a video or frame 1/last frame images for role: {role}"
                     )
 
-            if all(mode == "video" for mode in mode_by_role.values()):
-                video_by_role: Dict[str, str] = {}
-                start_time_by_role: Dict[str, float] = {}
-                for role, panel in self.role_panels.items():
-                    if not panel.video_path:
-                        raise ValueError(f"Select a video for role: {role}")
-                    video_by_role[role] = panel.video_path
-                    start_time_by_role[role] = 0.0
+            distinct_modes = set(mode_by_role.values())
+            if len(distinct_modes) > 1:
+                raise ValueError(
+                    "Use one input type for all roles: all videos or all frame image pairs"
+                )
 
+            if "video" in distinct_modes:
                 result = analyze_three_videos(
                     video_by_role=video_by_role,
                     start_time_by_role=start_time_by_role,
@@ -284,12 +285,7 @@ class ColorAnalyzerMobileApp(App):
                     control_min_target=control_min_target,
                     control_max_target=control_max_target,
                 )
-            elif all(mode == "images" for mode in mode_by_role.values()):
-                for role, panel in self.role_panels.items():
-                    if not panel.image_start_path or not panel.image_end_path:
-                        raise ValueError(f"Select start and end images for role: {role}")
-                    image_pair_by_role[role] = (panel.image_start_path, panel.image_end_path)
-
+            else:
                 result = analyze_three_image_pairs(
                     image_pair_by_role=image_pair_by_role,
                     duration_sec=duration_sec,
