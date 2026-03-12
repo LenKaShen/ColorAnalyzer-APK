@@ -518,13 +518,31 @@ class ColorAnalyzerMobileApp(App):
                 )
 
             rows = result["rows"]
-            lines = ["Analysis complete", "", "role | delta_e_scalar | rate | target"]
+            lines = [
+                "Analysis complete",
+                "",
+                "role | delta_e_scalar | rate | target",
+            ]
             for row in rows:
                 target = row.get("interpolated_target")
                 target_text = "" if target is None else f"{target:.6f}"
                 lines.append(
                     f"{row['role']} | {row['delta_e_scalar']:.6f} | {row['rate']:.9f} | {target_text}"
                 )
+                start_roi = row.get("start_roi")
+                end_roi = row.get("end_roi")
+                if start_roi is not None and end_roi is not None:
+                    lines.append(f"  ROI start={start_roi} end={end_roi}")
+
+                start_lab = row.get("start_lab_mean")
+                end_lab = row.get("end_lab_mean")
+                if start_lab is not None and end_lab is not None:
+                    lines.append(
+                        "  Lab start="
+                        f"({start_lab[0]:.3f},{start_lab[1]:.3f},{start_lab[2]:.3f}) "
+                        "end="
+                        f"({end_lab[0]:.3f},{end_lab[1]:.3f},{end_lab[2]:.3f})"
+                    )
 
             self._finish_run("\n".join(lines))
         except Exception as exc:

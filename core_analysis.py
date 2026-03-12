@@ -157,7 +157,7 @@ def analyze_pair(
     start_roi: Tuple[int, int, int, int],
     end_roi: Tuple[int, int, int, int],
     duration: float,
-) -> Dict[str, float]:
+) -> Dict[str, object]:
     if duration <= 0:
         raise ValueError("Duration must be > 0")
     if first_frame_rgb.shape != last_frame_rgb.shape:
@@ -208,7 +208,24 @@ def analyze_pair(
 
     delta_e_scalar = _trimmed_mean(delta_e_array)
     rate = float(delta_e_scalar) / float(duration)
-    return {"delta_e_scalar": float(delta_e_scalar), "rate": float(rate)}
+    start_lab_mean = first_lab.reshape(-1, 3).mean(axis=0)
+    end_lab_mean = last_lab.reshape(-1, 3).mean(axis=0)
+    return {
+        "delta_e_scalar": float(delta_e_scalar),
+        "rate": float(rate),
+        "start_roi": tuple(int(v) for v in start_roi),
+        "end_roi": tuple(int(v) for v in end_roi),
+        "start_lab_mean": (
+            float(start_lab_mean[0]),
+            float(start_lab_mean[1]),
+            float(start_lab_mean[2]),
+        ),
+        "end_lab_mean": (
+            float(end_lab_mean[0]),
+            float(end_lab_mean[1]),
+            float(end_lab_mean[2]),
+        ),
+    }
 
 
 def extract_frame(filepath: str, t_sec: float) -> np.ndarray:
@@ -305,6 +322,10 @@ def analyze_three_videos(
                 "source": os.path.basename(video_path),
                 "delta_e_scalar": analysis["delta_e_scalar"],
                 "rate": analysis["rate"],
+                "start_roi": analysis["start_roi"],
+                "end_roi": analysis["end_roi"],
+                "start_lab_mean": analysis["start_lab_mean"],
+                "end_lab_mean": analysis["end_lab_mean"],
                 "interpolated_target": None,
             }
         )
@@ -352,6 +373,10 @@ def analyze_three_image_pairs(
                 "source": f"{os.path.basename(start_path)} -> {os.path.basename(end_path)}",
                 "delta_e_scalar": analysis["delta_e_scalar"],
                 "rate": analysis["rate"],
+                "start_roi": analysis["start_roi"],
+                "end_roi": analysis["end_roi"],
+                "start_lab_mean": analysis["start_lab_mean"],
+                "end_lab_mean": analysis["end_lab_mean"],
                 "interpolated_target": None,
             }
         )
