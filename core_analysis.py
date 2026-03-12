@@ -175,10 +175,15 @@ def analyze_pair(
     if first_crop.shape[:2] != last_crop.shape[:2]:
         from PIL import Image
 
+        try:
+            resample_filter = Image.Resampling.BILINEAR
+        except AttributeError:
+            resample_filter = Image.BILINEAR
+
         last_crop = np.array(
             Image.fromarray(last_crop).resize(
                 (first_crop.shape[1], first_crop.shape[0]),
-                resample=Image.Resampling.BILINEAR,
+                resample=resample_filter,
             )
         )
 
@@ -207,7 +212,12 @@ def analyze_pair(
 
 
 def extract_frame(filepath: str, t_sec: float) -> np.ndarray:
-    import cv2
+    try:
+        import cv2
+    except Exception as exc:
+        raise RuntimeError(
+            "OpenCV is unavailable in this build. Use frame image inputs or rebuild with a working opencv recipe."
+        ) from exc
     if t_sec < 0:
         raise ValueError("Requested frame time is negative")
 

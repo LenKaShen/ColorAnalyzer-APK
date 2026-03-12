@@ -269,6 +269,7 @@ class ColorAnalyzerMobileApp(App):
                     raise ValueError(
                         f"Select either a video or frame 1/last frame images for role: {role}"
                     )
+                mode_by_role[role] = input_modes_role
 
             distinct_modes = set(mode_by_role.values())
             if len(distinct_modes) > 1:
@@ -290,10 +291,6 @@ class ColorAnalyzerMobileApp(App):
                     duration_sec=duration_sec,
                     control_min_target=control_min_target,
                     control_max_target=control_max_target,
-                )
-            else:
-                raise ValueError(
-                    "Use one input type for all roles: all videos or all frame image pairs"
                 )
 
             rows = result["rows"]
