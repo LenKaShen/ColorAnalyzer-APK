@@ -4,6 +4,7 @@ package.name = coloranalyzer
 package.domain = org.local
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,kv,atlas,txt
+source.exclude_patterns = *.pyc_Decompiled.py,.git/*,.github/*,__pycache__/*,Dockerfile,setup.sh
 version = 1.0.0
 requirements = python3,kivy,plyer,numpy,opencv-python-headless,pyjnius==1.6.1
 orientation = portrait

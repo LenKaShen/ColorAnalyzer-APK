@@ -57,6 +57,8 @@ If a previous failed cache is reused, do this once:
 
 Tip: changing `buildozer.spec` or `requirements.txt` also invalidates the local cache key used by the workflow.
 
+Note: Cython `language_level` warnings from third-party packages (for example Kivy `.pyx` files) are usually warnings, not fatal build errors. Prioritize fixing explicit Python exceptions (syntax/indentation/import failures) shown later in the log.
+
 ## Install on phone
 
 1. Enable USB debugging on Android.
