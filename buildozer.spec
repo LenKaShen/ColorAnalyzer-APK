@@ -9,7 +9,7 @@ version = 1.0.0
 requirements = python3,kivy,plyer,numpy,opencv-python-headless,pyjnius==1.6.1
 orientation = portrait
 fullscreen = 0
-android.permissions = READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
+android.permissions = READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_MEDIA_IMAGES,READ_MEDIA_VIDEO
 android.api = 33
 android.minapi = 24
 android.archs = arm64-v8a

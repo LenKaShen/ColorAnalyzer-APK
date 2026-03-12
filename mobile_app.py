@@ -121,20 +121,24 @@ class RolePanel(BoxLayout):
         filechooser.open_file(on_selection=callback, filters=["*.png", "*.jpg", "*.jpeg", "*.bmp", "*.webp"])
 
     def _on_video_selected(self, selection):
-        if selection:
-            self.video_path = selection[0]
-            self.video_label.text = os.path.basename(self.video_path)
+        if not selection:
+            return
+        path = selection[0]
+        self.video_path = path
+        name = os.path.basename(path)
+        Clock.schedule_once(lambda _: setattr(self.video_label, "text", name))
 
     def _on_image_selected(self, phase: str, selection):
         if not selection:
             return
-        selected = selection[0]
+        path = selection[0]
+        name = os.path.basename(path)
         if phase == "start":
-            self.image_start_path = selected
-            self.start_img_label.text = os.path.basename(selected)
+            self.image_start_path = path
+            Clock.schedule_once(lambda _: setattr(self.start_img_label, "text", name))
         else:
-            self.image_end_path = selected
-            self.end_img_label.text = os.path.basename(selected)
+            self.image_end_path = path
+            Clock.schedule_once(lambda _: setattr(self.end_img_label, "text", name))
 
 
 class ColorAnalyzerMobileApp(App):

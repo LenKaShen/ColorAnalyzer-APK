@@ -1,13 +1,13 @@
 import os
 from typing import Dict, Optional, Tuple
 
-import cv2
 import numpy as np
 
 ROLE_OPTIONS = ["control_min", "control_max", "sample"]
 
 
 def srgb_to_lab(rgb_array: np.ndarray) -> np.ndarray:
+    import cv2
     rgb_float = rgb_array.astype(np.float32) / 255.0
     return cv2.cvtColor(rgb_float, cv2.COLOR_RGB2LAB).astype(np.float64)
 
@@ -145,6 +145,7 @@ def analyze_pair(
     last_crop = last_frame_rgb[y2 : y2 + h2, x2 : x2 + w2]
 
     if first_crop.shape[:2] != last_crop.shape[:2]:
+        import cv2
         last_crop = cv2.resize(
             last_crop,
             (first_crop.shape[1], first_crop.shape[0]),
@@ -176,6 +177,7 @@ def analyze_pair(
 
 
 def extract_frame(filepath: str, t_sec: float) -> np.ndarray:
+    import cv2
     if t_sec < 0:
         raise ValueError("Requested frame time is negative")
 
@@ -220,6 +222,7 @@ def interpolate_sample_target(
 
 
 def _load_image_rgb(path: str) -> np.ndarray:
+    import cv2
     image_bgr = cv2.imread(path, cv2.IMREAD_COLOR)
     if image_bgr is None:
         raise RuntimeError(f"Could not read image: {os.path.basename(path)}")
