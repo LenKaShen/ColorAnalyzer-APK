@@ -11,18 +11,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Clear old caches (fresh build)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const caches = await github.rest.actions.getActionsCacheList({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            for (const cache of caches.data.actions_caches) {
+              await github.rest.actions.deleteActionsCacheById({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                cache_id: cache.id,
+              });
+            }
+
       - name: Cache buildozer global (SDK/NDK/ANT)
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          key: buildozer-global-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-global-${{ hashFiles('buildozer.spec', 'requirements.txt') }}-kivy21
           restore-keys: buildozer-global-
 
       - name: Cache buildozer local (compiled recipes)
         uses: actions/cache@v4
         with:
           path: .buildozer
-          key: buildozer-local-${{ hashFiles('buildozer.spec', 'requirements.txt') }}
+          key: buildozer-local-${{ hashFiles('buildozer.spec', 'requirements.txt') }}-kivy21
           restore-keys: buildozer-local-
 
       - name: Install system dependencies
