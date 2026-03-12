@@ -6,6 +6,60 @@ import numpy as np
 ROLE_OPTIONS = ["control_min", "control_max", "sample"]
 
 
+def _load_image_from_uri(path: str) -> np.ndarray:
+    """
+    Load image from a file path or Android content:// URI.
+    Returns RGB array (H, W, 3).
+    """
+    from PIL import Image
+
+    try:
+        # Try direct file path first
+        if os.path.isfile(path):
+            img = Image.open(path)
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+            return np.array(img, dtype=np.uint8)
+        
+        # Try content URI resolution via Android
+        if path.startswith("content://"):
+            try:
+                import io
+                from jnius import autoclass, PythonJavaClass, java_method
+                
+                PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                activity = PythonActivity.mActivity
+                resolver = activity.getContentResolver()
+                
+                uri_obj = autoclass("android.net.Uri").parse(path)
+                input_stream = resolver.openInputStream(uri_obj)
+                
+                # Read stream into bytes
+                byte_buffer = io.BytesIO()
+                while True:
+                    byte_data = input_stream.read()
+                    if byte_data is None or len(byte_data) == 0:
+                        break
+                    byte_buffer.write(bytes(byte_data))
+                input_stream.close()
+                
+                byte_buffer.seek(0)
+                img = Image.open(byte_buffer)
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+                return np.array(img, dtype=np.uint8)
+            except Exception as e:
+                print(f"[DEBUG] Content URI load failed: {e}, falling back to PIL")
+        
+        # Last resort: try PIL directly (may work if content URI was cached)
+        img = Image.open(path)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        return np.array(img, dtype=np.uint8)
+    except Exception as e:
+        raise ValueError(f"Failed to load image from '{path}': {e}")
+
+
 def srgb_to_lab(rgb_array: np.ndarray) -> np.ndarray:
     rgb_float = rgb_array.astype(np.float64) / 255.0
 
@@ -279,13 +333,8 @@ def interpolate_sample_target(
 
 
 def _load_image_rgb(path: str) -> np.ndarray:
-    from PIL import Image
-
-    try:
-        with Image.open(path) as image:
-            return np.array(image.convert("RGB"), dtype=np.uint8)
-    except Exception as exc:
-        raise RuntimeError(f"Could not read image: {os.path.basename(path)}") from exc
+    """Load image from file path or Android content:// URI."""
+    return _load_image_from_uri(path)
 
 
 def analyze_three_videos(
