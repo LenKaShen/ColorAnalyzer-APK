@@ -1,5 +1,6 @@
 import os
 import threading
+import traceback
 from functools import partial
 from typing import Dict, Optional, Tuple
 
@@ -14,9 +15,13 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.spinner import Spinner
 from kivy.uix.textinput import TextInput
 
-from plyer import filechooser
+try:
+    from plyer import filechooser
+except Exception:
+    filechooser = None
 
-from core_analysis import ROLE_OPTIONS, analyze_three_image_pairs, analyze_three_videos
+
+ROLE_OPTIONS = ["control_min", "control_max", "sample"]
 
 
 class RolePanel(BoxLayout):
@@ -29,7 +34,7 @@ class RolePanel(BoxLayout):
         self.image_start_path: Optional[str] = None
         self.image_end_path: Optional[str] = None
 
-        self.add_widget(Label(text=f"Role: {role}", size_hint_y=None, height=dp(24), bold=True))
+        self.add_widget(Label(text=f"Role: {role}", size_hint_y=None, height=dp(24)))
 
         video_row = BoxLayout(size_hint_y=None, height=dp(36), spacing=dp(6))
         self.video_btn = Button(text="Pick Video")
@@ -95,9 +100,18 @@ class RolePanel(BoxLayout):
         return {"start": parse(self.start_roi_inputs), "end": parse(self.end_roi_inputs)}
 
     def pick_video(self) -> None:
+        if filechooser is None:
+            self.video_label.text = "File picker unavailable"
+            return
         filechooser.open_file(on_selection=self._on_video_selected, filters=["*.mp4", "*.mov", "*.avi", "*.mkv"])
 
     def pick_image(self, phase: str) -> None:
+        if filechooser is None:
+            if phase == "start":
+                self.start_img_label.text = "File picker unavailable"
+            else:
+                self.end_img_label.text = "File picker unavailable"
+            return
         callback = partial(self._on_image_selected, phase)
         filechooser.open_file(on_selection=callback, filters=["*.png", "*.jpg", "*.jpeg", "*.bmp", "*.webp"])
 
@@ -129,7 +143,6 @@ class ColorAnalyzerMobileApp(App):
             size_hint_y=None,
             height=dp(34),
             font_size="20sp",
-            bold=True,
         )
         root.add_widget(header)
 
@@ -229,6 +242,9 @@ class ColorAnalyzerMobileApp(App):
 
     def _run_analysis_worker(self) -> None:
         try:
+            # Import heavy analysis deps lazily so UI can still open if an Android wheel is missing.
+            from core_analysis import analyze_three_image_pairs, analyze_three_videos
+
             duration_sec = self._parse_duration_sec()
             control_min_target = self._parse_optional_float(self.control_min_input.text)
             control_max_target = self._parse_optional_float(self.control_max_input.text)
@@ -283,7 +299,8 @@ class ColorAnalyzerMobileApp(App):
 
             self._finish_run("\n".join(lines))
         except Exception as exc:
-            self._finish_run(f"Error: {exc}")
+            details = traceback.format_exc(limit=4)
+            self._finish_run(f"Error: {exc}\n\n{details}")
 
     def _finish_run(self, message: str) -> None:
         Clock.schedule_once(lambda _: self._set_output(message), 0)
