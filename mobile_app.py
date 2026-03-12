@@ -123,22 +123,36 @@ class RolePanel(BoxLayout):
     def _on_video_selected(self, selection):
         if not selection:
             return
-        path = selection[0]
+        try:
+            path = selection[0] if isinstance(selection, (list, tuple)) else str(selection)
+        except (TypeError, IndexError):
+            path = str(selection)
+
+        if not path or not isinstance(path, str) or path.strip() == "":
+            return
+
         self.video_path = path
         name = os.path.basename(path)
-        Clock.schedule_once(lambda _: setattr(self.video_label, "text", name))
+        Clock.schedule_once(lambda _: setattr(self.video_label, "text", name or "video selected"))
 
     def _on_image_selected(self, phase: str, selection):
         if not selection:
             return
-        path = selection[0]
+        try:
+            path = selection[0] if isinstance(selection, (list, tuple)) else str(selection)
+        except (TypeError, IndexError):
+            path = str(selection)
+
+        if not path or not isinstance(path, str) or path.strip() == "":
+            return
+
         name = os.path.basename(path)
         if phase == "start":
             self.image_start_path = path
-            Clock.schedule_once(lambda _: setattr(self.start_img_label, "text", name))
+            Clock.schedule_once(lambda _: setattr(self.start_img_label, "text", name or "frame 1 selected"))
         else:
             self.image_end_path = path
-            Clock.schedule_once(lambda _: setattr(self.end_img_label, "text", name))
+            Clock.schedule_once(lambda _: setattr(self.end_img_label, "text", name or "last frame selected"))
 
 
 class ColorAnalyzerMobileApp(App):
