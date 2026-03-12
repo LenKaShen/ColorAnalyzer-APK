@@ -7,10 +7,13 @@ from typing import Dict, Optional, Tuple
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.window import Window
+from kivy.graphics import Color, Line
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
+from kivy.uix.image import Image
 from kivy.uix.label import Label
+from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
 
@@ -56,15 +59,108 @@ def _text_input(text: str, input_filter: str) -> TextInput:
     )
 
 
+class ROIImage(Image):
+    def __init__(self, **kwargs):
+        super().__init__(allow_stretch=True, keep_ratio=True, **kwargs)
+        self._drag_start: Optional[Tuple[float, float]] = None
+        self._drag_end: Optional[Tuple[float, float]] = None
+        self.bind(pos=lambda *_: self._redraw_roi())
+        self.bind(size=lambda *_: self._redraw_roi())
+        self.bind(texture=lambda *_: self._redraw_roi())
+
+    def _display_rect(self) -> Tuple[float, float, float, float]:
+        draw_w, draw_h = self.norm_image_size
+        x0 = self.center_x - draw_w / 2.0
+        y0 = self.center_y - draw_h / 2.0
+        return (x0, y0, draw_w, draw_h)
+
+    def _clamp_point(self, x: float, y: float) -> Tuple[float, float]:
+        x0, y0, w, h = self._display_rect()
+        return (max(x0, min(x, x0 + w)), max(y0, min(y, y0 + h)))
+
+    def on_touch_down(self, touch):
+        if not self.collide_point(*touch.pos):
+            return super().on_touch_down(touch)
+        cx, cy = self._clamp_point(touch.x, touch.y)
+        self._drag_start = (cx, cy)
+        self._drag_end = (cx, cy)
+        self._redraw_roi()
+        return True
+
+    def on_touch_move(self, touch):
+        if self._drag_start is None:
+            return super().on_touch_move(touch)
+        self._drag_end = self._clamp_point(touch.x, touch.y)
+        self._redraw_roi()
+        return True
+
+    def on_touch_up(self, touch):
+        if self._drag_start is None:
+            return super().on_touch_up(touch)
+        self._drag_end = self._clamp_point(touch.x, touch.y)
+        self._redraw_roi()
+        return True
+
+    def _redraw_roi(self) -> None:
+        self.canvas.after.clear()
+        if self._drag_start is None or self._drag_end is None:
+            return
+        x1, y1 = self._drag_start
+        x2, y2 = self._drag_end
+        x = min(x1, x2)
+        y = min(y1, y2)
+        w = abs(x2 - x1)
+        h = abs(y2 - y1)
+        if w < 2 or h < 2:
+            return
+        with self.canvas.after:
+            Color(1.0, 0.4, 0.2, 1.0)
+            Line(rectangle=(x, y, w, h), width=2.0)
+
+    def get_roi_pixels(self) -> Optional[Tuple[int, int, int, int]]:
+        if self._drag_start is None or self._drag_end is None or self.texture is None:
+            return None
+
+        x0, y0, w, h = self._display_rect()
+        if w <= 1 or h <= 1:
+            return None
+
+        x1, y1 = self._drag_start
+        x2, y2 = self._drag_end
+        left = max(x0, min(x1, x2))
+        right = min(x0 + w, max(x1, x2))
+        bottom = max(y0, min(y1, y2))
+        top = min(y0 + h, max(y1, y2))
+        if right - left < 2 or top - bottom < 2:
+            return None
+
+        img_w, img_h = self.texture.size
+
+        px_left = int(((left - x0) / w) * img_w)
+        px_right = int(((right - x0) / w) * img_w)
+        py_top = int((1.0 - ((top - y0) / h)) * img_h)
+        py_bottom = int((1.0 - ((bottom - y0) / h)) * img_h)
+
+        roi_x = max(0, min(px_left, img_w - 1))
+        roi_y = max(0, min(py_top, img_h - 1))
+        roi_w = max(1, min(px_right - px_left, img_w - roi_x))
+        roi_h = max(1, min(py_bottom - py_top, img_h - roi_y))
+        return (roi_x, roi_y, roi_w, roi_h)
+
+
 class RolePanel(BoxLayout):
     def __init__(self, role: str, **kwargs):
         super().__init__(orientation="vertical", spacing=dp(6), size_hint_y=None, **kwargs)
         self.role = role
-        self.height = dp(180)
+        self.height = dp(280)
 
         self.video_path: Optional[str] = None
         self.image_start_path: Optional[str] = None
         self.image_end_path: Optional[str] = None
+        self.image_rois: Dict[str, Optional[Tuple[int, int, int, int]]] = {
+            "start": None,
+            "end": None,
+        }
 
         self.add_widget(_label(text=f"Role: {role}", size_hint_y=None, height=dp(24)))
 
@@ -95,6 +191,15 @@ class RolePanel(BoxLayout):
         start_row.add_widget(self.start_img_label)
         self.add_widget(start_row)
 
+        start_roi_row = BoxLayout(size_hint_y=None, height=dp(32), spacing=dp(6))
+        self.start_roi_btn = _button(text="Preview + Set Frame 1 ROI")
+        self.start_roi_btn.bind(on_release=lambda *_: self.open_roi_editor("start"))
+        self.start_roi_label = _label(text="ROI: full image", muted=True, halign="left", valign="middle")
+        self.start_roi_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+        start_roi_row.add_widget(self.start_roi_btn)
+        start_roi_row.add_widget(self.start_roi_label)
+        self.add_widget(start_roi_row)
+
         end_row = BoxLayout(size_hint_y=None, height=dp(36), spacing=dp(6))
         self.end_img_btn = _button(text="Pick Last Frame Image")
         self.end_img_btn.bind(on_release=lambda *_: self.pick_image("end"))
@@ -104,11 +209,25 @@ class RolePanel(BoxLayout):
         end_row.add_widget(self.end_img_label)
         self.add_widget(end_row)
 
+        end_roi_row = BoxLayout(size_hint_y=None, height=dp(32), spacing=dp(6))
+        self.end_roi_btn = _button(text="Preview + Set Last Frame ROI")
+        self.end_roi_btn.bind(on_release=lambda *_: self.open_roi_editor("end"))
+        self.end_roi_label = _label(text="ROI: full image", muted=True, halign="left", valign="middle")
+        self.end_roi_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+        end_roi_row.add_widget(self.end_roi_btn)
+        end_roi_row.add_widget(self.end_roi_label)
+        self.add_widget(end_roi_row)
+
     def pick_video(self) -> None:
         if filechooser is None:
             self.video_label.text = "File picker unavailable"
             return
-        filechooser.open_file(on_selection=self._on_video_selected, filters=["*.mp4", "*.mov", "*.avi", "*.mkv"])
+        selection = filechooser.open_file(
+            on_selection=self._on_video_selected,
+            filters=["*.mp4", "*.mov", "*.avi", "*.mkv"],
+        )
+        if selection:
+            self._on_video_selected(selection)
 
     def pick_image(self, phase: str) -> None:
         if filechooser is None:
@@ -118,41 +237,112 @@ class RolePanel(BoxLayout):
                 self.end_img_label.text = "File picker unavailable"
             return
         callback = partial(self._on_image_selected, phase)
-        filechooser.open_file(on_selection=callback, filters=["*.png", "*.jpg", "*.jpeg", "*.bmp", "*.webp"])
+        selection = filechooser.open_file(
+            on_selection=callback,
+            filters=["*.png", "*.jpg", "*.jpeg", "*.bmp", "*.webp"],
+        )
+        if selection:
+            self._on_image_selected(phase, selection)
 
-    def _on_video_selected(self, selection):
-        if not selection:
-            return
+    def _extract_selected_path(self, selection=None, *args, **kwargs) -> Optional[str]:
+        candidate = selection
+        if candidate is None and args:
+            candidate = args[0]
+        if candidate is None:
+            candidate = kwargs.get("selection") or kwargs.get("path")
+
         try:
-            path = selection[0] if isinstance(selection, (list, tuple)) else str(selection)
+            path = candidate[0] if isinstance(candidate, (list, tuple)) else str(candidate)
         except (TypeError, IndexError):
-            path = str(selection)
+            path = str(candidate)
 
         if not path or not isinstance(path, str) or path.strip() == "":
+            return None
+        return path
+
+    def _on_video_selected(self, selection=None, *args, **kwargs):
+        path = self._extract_selected_path(selection, *args, **kwargs)
+        if not path:
             return
 
         self.video_path = path
         name = os.path.basename(path)
         Clock.schedule_once(lambda _: setattr(self.video_label, "text", name or "video selected"))
 
-    def _on_image_selected(self, phase: str, selection):
-        if not selection:
-            return
-        try:
-            path = selection[0] if isinstance(selection, (list, tuple)) else str(selection)
-        except (TypeError, IndexError):
-            path = str(selection)
-
-        if not path or not isinstance(path, str) or path.strip() == "":
+    def _on_image_selected(self, phase: str, selection=None, *args, **kwargs):
+        path = self._extract_selected_path(selection, *args, **kwargs)
+        if not path:
             return
 
         name = os.path.basename(path)
         if phase == "start":
             self.image_start_path = path
+            self.image_rois["start"] = None
+            self.start_roi_label.text = "ROI: full image"
             Clock.schedule_once(lambda _: setattr(self.start_img_label, "text", name or "frame 1 selected"))
         else:
             self.image_end_path = path
+            self.image_rois["end"] = None
+            self.end_roi_label.text = "ROI: full image"
             Clock.schedule_once(lambda _: setattr(self.end_img_label, "text", name or "last frame selected"))
+
+    def open_roi_editor(self, phase: str) -> None:
+        image_path = self.image_start_path if phase == "start" else self.image_end_path
+        if not image_path:
+            if phase == "start":
+                self.start_img_label.text = "Pick frame 1 image first"
+            else:
+                self.end_img_label.text = "Pick last frame image first"
+            return
+
+        roi_image = ROIImage(source=image_path)
+        instructions = _label(
+            text="Drag on image to draw ROI. Save with no rectangle to use full image.",
+            muted=True,
+            size_hint_y=None,
+            height=dp(30),
+            halign="left",
+            valign="middle",
+        )
+        instructions.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+
+        button_row = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
+        save_btn = _button("Save ROI")
+        clear_btn = _button("Clear ROI")
+        cancel_btn = _button("Cancel")
+        button_row.add_widget(save_btn)
+        button_row.add_widget(clear_btn)
+        button_row.add_widget(cancel_btn)
+
+        content = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
+        content.add_widget(instructions)
+        content.add_widget(roi_image)
+        content.add_widget(button_row)
+
+        popup = Popup(title=f"Set {self.role} {phase} ROI", content=content, size_hint=(0.96, 0.9))
+
+        def _save_roi(*_):
+            roi = roi_image.get_roi_pixels()
+            self.image_rois[phase] = roi
+            self._set_roi_label(phase, roi)
+            popup.dismiss()
+
+        def _clear_roi(*_):
+            self.image_rois[phase] = None
+            self._set_roi_label(phase, None)
+            popup.dismiss()
+
+        save_btn.bind(on_release=_save_roi)
+        clear_btn.bind(on_release=_clear_roi)
+        cancel_btn.bind(on_release=lambda *_: popup.dismiss())
+        popup.open()
+
+    def _set_roi_label(self, phase: str, roi: Optional[Tuple[int, int, int, int]]) -> None:
+        text = "ROI: full image" if roi is None else f"ROI: {roi[0]},{roi[1]},{roi[2]},{roi[3]}"
+        if phase == "start":
+            self.start_roi_label.text = text
+        else:
+            self.end_roi_label.text = text
 
 
 class ColorAnalyzerMobileApp(App):
@@ -217,10 +407,23 @@ class ColorAnalyzerMobileApp(App):
         try:
             from android.permissions import Permission, request_permissions
 
+            read_media_images = getattr(
+                Permission,
+                "READ_MEDIA_IMAGES",
+                Permission.READ_EXTERNAL_STORAGE,
+            )
+            read_media_video = getattr(
+                Permission,
+                "READ_MEDIA_VIDEO",
+                Permission.READ_EXTERNAL_STORAGE,
+            )
+
             request_permissions(
                 [
                     Permission.READ_EXTERNAL_STORAGE,
                     Permission.WRITE_EXTERNAL_STORAGE,
+                    read_media_images,
+                    read_media_video,
                 ]
             )
         except Exception:
@@ -300,11 +503,18 @@ class ColorAnalyzerMobileApp(App):
                     control_max_target=control_max_target,
                 )
             else:
+                rois_by_role: Dict[str, Dict[str, Optional[Tuple[int, int, int, int]]]] = {}
+                for role, panel in self.role_panels.items():
+                    rois_by_role[role] = {
+                        "start": panel.image_rois["start"],
+                        "end": panel.image_rois["end"],
+                    }
                 result = analyze_three_image_pairs(
                     image_pair_by_role=image_pair_by_role,
                     duration_sec=duration_sec,
                     control_min_target=control_min_target,
                     control_max_target=control_max_target,
+                    rois_by_role=rois_by_role,
                 )
 
             rows = result["rows"]
