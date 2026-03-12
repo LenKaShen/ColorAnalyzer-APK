@@ -2,7 +2,6 @@ import os
 import threading
 import traceback
 from functools import partial
-from typing import Dict, Optional
 from typing import Dict, Optional, Tuple
 
 from kivy.app import App

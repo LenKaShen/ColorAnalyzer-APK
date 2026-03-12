@@ -7,9 +7,37 @@ ROLE_OPTIONS = ["control_min", "control_max", "sample"]
 
 
 def srgb_to_lab(rgb_array: np.ndarray) -> np.ndarray:
-    import cv2
-    rgb_float = rgb_array.astype(np.float32) / 255.0
-    return cv2.cvtColor(rgb_float, cv2.COLOR_RGB2LAB).astype(np.float64)
+    rgb_float = rgb_array.astype(np.float64) / 255.0
+
+    # sRGB to linear RGB
+    linear = np.where(
+        rgb_float <= 0.04045,
+        rgb_float / 12.92,
+        ((rgb_float + 0.055) / 1.055) ** 2.4,
+    )
+
+    # linear RGB to XYZ (D65)
+    x = linear[..., 0] * 0.4124564 + linear[..., 1] * 0.3575761 + linear[..., 2] * 0.1804375
+    y = linear[..., 0] * 0.2126729 + linear[..., 1] * 0.7151522 + linear[..., 2] * 0.0721750
+    z = linear[..., 0] * 0.0193339 + linear[..., 1] * 0.1191920 + linear[..., 2] * 0.9503041
+
+    # XYZ to Lab
+    xn, yn, zn = 0.95047, 1.00000, 1.08883
+    xr, yr, zr = x / xn, y / yn, z / zn
+
+    delta = 6.0 / 29.0
+    delta3 = delta**3
+    inv_3delta2 = 1.0 / (3.0 * delta * delta)
+    offset = 4.0 / 29.0
+
+    def f(t: np.ndarray) -> np.ndarray:
+        return np.where(t > delta3, np.cbrt(t), t * inv_3delta2 + offset)
+
+    fx, fy, fz = f(xr), f(yr), f(zr)
+    l = 116.0 * fy - 16.0
+    a = 500.0 * (fx - fy)
+    b = 200.0 * (fy - fz)
+    return np.stack([l, a, b], axis=-1)
 
 
 def compute_delta_e_2000(lab1: np.ndarray, lab2: np.ndarray) -> np.ndarray:
@@ -145,11 +173,13 @@ def analyze_pair(
     last_crop = last_frame_rgb[y2 : y2 + h2, x2 : x2 + w2]
 
     if first_crop.shape[:2] != last_crop.shape[:2]:
-        import cv2
-        last_crop = cv2.resize(
-            last_crop,
-            (first_crop.shape[1], first_crop.shape[0]),
-            interpolation=cv2.INTER_AREA,
+        from PIL import Image
+
+        last_crop = np.array(
+            Image.fromarray(last_crop).resize(
+                (first_crop.shape[1], first_crop.shape[0]),
+                resample=Image.Resampling.BILINEAR,
+            )
         )
 
     first_saturated = np.sum((first_crop == 0) | (first_crop == 255)) / first_crop.size
@@ -222,11 +252,13 @@ def interpolate_sample_target(
 
 
 def _load_image_rgb(path: str) -> np.ndarray:
-    import cv2
-    image_bgr = cv2.imread(path, cv2.IMREAD_COLOR)
-    if image_bgr is None:
-        raise RuntimeError(f"Could not read image: {os.path.basename(path)}")
-    return cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+    from PIL import Image
+
+    try:
+        with Image.open(path) as image:
+            return np.array(image.convert("RGB"), dtype=np.uint8)
+    except Exception as exc:
+        raise RuntimeError(f"Could not read image: {os.path.basename(path)}") from exc
 
 
 def analyze_three_videos(
