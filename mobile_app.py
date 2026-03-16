@@ -486,7 +486,14 @@ class ColorAnalyzerMobileApp(App):
         content.add_widget(config_title)
 
         duration_row = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
-        duration_row.add_widget(_label(text="Video Duration", size_hint_x=0.34, halign="left", valign="middle"))
+        duration_label = _label(
+            text="Duration",
+            size_hint_x=0.34,
+            halign="left",
+            valign="middle",
+        )
+        duration_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+        duration_row.add_widget(duration_label)
         self.hours_input = _text_input(text="0", input_filter="int")
         self.minutes_input = _text_input(text="0", input_filter="int")
         self.seconds_input = _text_input(text="10", input_filter="int")
@@ -505,20 +512,33 @@ class ColorAnalyzerMobileApp(App):
         duration_row.add_widget(self.seconds_input)
         content.add_widget(duration_row)
 
-        calibration_row = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
-        calibration_row.add_widget(
-            _label(text="Control Min Target", size_hint_x=0.34, halign="left", valign="middle")
+        control_min_row = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
+        control_min_label = _label(
+            text="Control Min",
+            size_hint_x=0.34,
+            halign="left",
+            valign="middle",
         )
+        control_min_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+        control_min_row.add_widget(control_min_label)
         self.control_min_input = _text_input(text="", input_filter="float")
         self.control_min_input.hint_text = "e.g. 0.0"
-        calibration_row.add_widget(self.control_min_input)
-        calibration_row.add_widget(
-            _label(text="Control Max Target", size_hint_x=0.34, halign="left", valign="middle")
+        control_min_row.add_widget(self.control_min_input)
+        content.add_widget(control_min_row)
+
+        control_max_row = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
+        control_max_label = _label(
+            text="Control Max",
+            size_hint_x=0.34,
+            halign="left",
+            valign="middle",
         )
+        control_max_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+        control_max_row.add_widget(control_max_label)
         self.control_max_input = _text_input(text="", input_filter="float")
         self.control_max_input.hint_text = "e.g. 100.0"
-        calibration_row.add_widget(self.control_max_input)
-        content.add_widget(calibration_row)
+        control_max_row.add_widget(self.control_max_input)
+        content.add_widget(control_max_row)
 
         self.role_panels: Dict[str, RolePanel] = {}
 
@@ -555,7 +575,7 @@ class ColorAnalyzerMobileApp(App):
         action_row.add_widget(self.status_label)
         root.add_widget(action_row)
 
-        output_scroll = ScrollView(size_hint_y=None, height=dp(160), do_scroll_x=False)
+        output_scroll = ScrollView(size_hint_y=None, height=dp(190), do_scroll_x=False)
         self.output_label = _label(text="Ready", halign="left", valign="top", size_hint_y=None)
         self.output_label.bind(texture_size=lambda inst, val: setattr(inst, "height", max(dp(160), val[1])))
         self.output_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
@@ -612,6 +632,54 @@ class ColorAnalyzerMobileApp(App):
         if cleaned == "":
             return None
         return float(cleaned)
+
+    def _format_table_cell(self, value: str, width: int) -> str:
+        text = str(value)
+        if len(text) > width:
+            return text[: max(1, width - 1)] + "~"
+        return text.ljust(width)
+
+    def _format_analysis_output(self, rows) -> str:
+        headers = [
+            ("role", 7),
+            ("dE", 9),
+            ("rate", 11),
+            ("target", 9),
+        ]
+        header_line = " ".join(self._format_table_cell(name, width) for name, width in headers)
+        divider = " ".join("-" * width for _, width in headers)
+
+        lines = ["Analysis complete", "", header_line, divider]
+        for row in rows:
+            target = row.get("interpolated_target")
+            target_text = "-" if target is None else f"{target:.4f}"
+            lines.append(
+                " ".join(
+                    [
+                        self._format_table_cell(row["role"], 7),
+                        self._format_table_cell(f"{row['delta_e_scalar']:.4f}", 9),
+                        self._format_table_cell(f"{row['rate']:.6f}", 11),
+                        self._format_table_cell(target_text, 9),
+                    ]
+                )
+            )
+
+            start_roi = row.get("start_roi")
+            end_roi = row.get("end_roi")
+            if start_roi is not None and end_roi is not None:
+                lines.append(f"  roi s:{start_roi} e:{end_roi}")
+
+            start_lab = row.get("start_lab_mean")
+            end_lab = row.get("end_lab_mean")
+            if start_lab is not None and end_lab is not None:
+                lines.append(
+                    "  lab s:"
+                    f"({start_lab[0]:.1f},{start_lab[1]:.1f},{start_lab[2]:.1f}) "
+                    "e:"
+                    f"({end_lab[0]:.1f},{end_lab[1]:.1f},{end_lab[2]:.1f})"
+                )
+
+        return "\n".join(lines)
 
     def _run_analysis_worker(self) -> None:
         try:
@@ -681,33 +749,7 @@ class ColorAnalyzerMobileApp(App):
                 )
 
             rows = result["rows"]
-            lines = [
-                "Analysis complete",
-                "",
-                "role | delta_e_scalar | rate | target",
-            ]
-            for row in rows:
-                target = row.get("interpolated_target")
-                target_text = "" if target is None else f"{target:.6f}"
-                lines.append(
-                    f"{row['role']} | {row['delta_e_scalar']:.6f} | {row['rate']:.9f} | {target_text}"
-                )
-                start_roi = row.get("start_roi")
-                end_roi = row.get("end_roi")
-                if start_roi is not None and end_roi is not None:
-                    lines.append(f"  ROI start={start_roi} end={end_roi}")
-
-                start_lab = row.get("start_lab_mean")
-                end_lab = row.get("end_lab_mean")
-                if start_lab is not None and end_lab is not None:
-                    lines.append(
-                        "  Lab start="
-                        f"({start_lab[0]:.3f},{start_lab[1]:.3f},{start_lab[2]:.3f}) "
-                        "end="
-                        f"({end_lab[0]:.3f},{end_lab[1]:.3f},{end_lab[2]:.3f})"
-                    )
-
-            self._finish_run("\n".join(lines))
+            self._finish_run(self._format_analysis_output(rows))
         except Exception as exc:
             details = traceback.format_exc(limit=4)
             self._finish_run(f"Error: {exc}\n\n{details}")
