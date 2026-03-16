@@ -13,7 +13,6 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.image import Image
 from kivy.uix.label import Label
-from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
 
@@ -191,8 +190,14 @@ class ROIImage(Image):
 
 class RolePanel(BoxLayout):
     def __init__(self, role: str, **kwargs):
-        super().__init__(orientation="vertical", spacing=dp(4), size_hint_y=None, **kwargs)
-        self.height = Window.height * 0.25  # responsive height based on screen
+        super().__init__(
+            orientation="vertical",
+            spacing=dp(6),
+            padding=dp(8),
+            size_hint_y=None,
+            **kwargs,
+        )
+        self.bind(minimum_height=self.setter("height"))
 
         self.role = role
         self.video_path: Optional[str] = None
@@ -204,67 +209,99 @@ class RolePanel(BoxLayout):
         }
 
         # Header
-        self.add_widget(_label(text=f"Role: {role}", size_hint_y=None, height=dp(20)))
+        self.add_widget(_label(text=f"Role: {role}", size_hint_y=None, height=dp(24)))
 
-        # Video section (compact)
-        video_row = BoxLayout(size_hint_y=None, height=dp(32), spacing=dp(4))
-        self.video_btn = _button(text="Video")
+        # Video section
+        video_row = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(8))
+        self.video_btn = _button(text="Pick Video", size_hint_x=0.32)
         self.video_btn.bind(on_release=lambda *_: self.pick_video())
-        self.video_label = _label(text="—", muted=True, halign="left", valign="middle")
+        self.video_label = _label(
+            text="No video selected",
+            muted=True,
+            halign="left",
+            valign="middle",
+            size_hint_x=0.68,
+        )
         self.video_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
         video_row.add_widget(self.video_btn)
         video_row.add_widget(self.video_label)
         self.add_widget(video_row)
 
-        # Images section (compact)
-        img_header = _label(text="Or Frame 1 + Last", muted=True, size_hint_y=None, height=dp(16))
+        # Images section
+        img_header = _label(
+            text="Or use Frame 1 + Last Frame images (draw ROI on image)",
+            muted=True,
+            size_hint_y=None,
+            height=dp(20),
+            halign="left",
+            valign="middle",
+        )
+        img_header.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
         self.add_widget(img_header)
 
         # Frame 1
-        start_row = BoxLayout(size_hint_y=None, height=dp(32), spacing=dp(4))
-        self.start_img_btn = _button(text="Frame 1")
+        start_row = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(8))
+        self.start_img_btn = _button(text="Pick Frame 1", size_hint_x=0.32)
         self.start_img_btn.bind(on_release=lambda *_: self.pick_image("start"))
-        self.start_img_label = _label(text="—", muted=True, halign="left", valign="middle")
+        self.start_img_label = _label(
+            text="No frame 1 image",
+            muted=True,
+            halign="left",
+            valign="middle",
+            size_hint_x=0.68,
+        )
         self.start_img_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
         start_row.add_widget(self.start_img_btn)
         start_row.add_widget(self.start_img_label)
         self.add_widget(start_row)
 
-        # Frame 1 ROI display (responsive)
-        self.start_roi_image = ROIImage(on_roi_change=lambda roi: self._on_roi_drawn("start", roi), size_hint_y=None, height=dp(140))
+        # Frame 1 ROI display
+        self.start_roi_image = ROIImage(
+            on_roi_change=lambda roi: self._on_roi_drawn("start", roi),
+            size_hint_y=None,
+            height=0,
+        )
         self.add_widget(self.start_roi_image)
 
         # Frame 1 ROI label + clear button
-        start_roi_label_row = BoxLayout(size_hint_y=None, height=dp(24), spacing=dp(4))
-        self.start_roi_label = _label(text="ROI: full", muted=True, halign="left", valign="middle")
+        start_roi_label_row = BoxLayout(size_hint_y=None, height=dp(30), spacing=dp(8))
+        self.start_roi_label = _label(text="ROI: full image", muted=True, halign="left", valign="middle")
         self.start_roi_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
-        start_roi_clear = _button(text="Clear")
-        start_roi_clear.size_hint_x = 0.25
+        start_roi_clear = _button(text="Clear ROI", size_hint_x=0.28)
         start_roi_clear.bind(on_release=lambda *_: self._clear_roi("start"))
         start_roi_label_row.add_widget(self.start_roi_label)
         start_roi_label_row.add_widget(start_roi_clear)
         self.add_widget(start_roi_label_row)
 
         # Frame Last
-        end_row = BoxLayout(size_hint_y=None, height=dp(32), spacing=dp(4))
-        self.end_img_btn = _button(text="Last Frame")
+        end_row = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(8))
+        self.end_img_btn = _button(text="Pick Last Frame", size_hint_x=0.32)
         self.end_img_btn.bind(on_release=lambda *_: self.pick_image("end"))
-        self.end_img_label = _label(text="—", muted=True, halign="left", valign="middle")
+        self.end_img_label = _label(
+            text="No last frame image",
+            muted=True,
+            halign="left",
+            valign="middle",
+            size_hint_x=0.68,
+        )
         self.end_img_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
         end_row.add_widget(self.end_img_btn)
         end_row.add_widget(self.end_img_label)
         self.add_widget(end_row)
 
-        # Last Frame ROI display (responsive)
-        self.end_roi_image = ROIImage(on_roi_change=lambda roi: self._on_roi_drawn("end", roi), size_hint_y=None, height=dp(140))
+        # Last Frame ROI display
+        self.end_roi_image = ROIImage(
+            on_roi_change=lambda roi: self._on_roi_drawn("end", roi),
+            size_hint_y=None,
+            height=0,
+        )
         self.add_widget(self.end_roi_image)
 
         # Last Frame ROI label + clear button
-        end_roi_label_row = BoxLayout(size_hint_y=None, height=dp(24), spacing=dp(4))
-        self.end_roi_label = _label(text="ROI: full", muted=True, halign="left", valign="middle")
+        end_roi_label_row = BoxLayout(size_hint_y=None, height=dp(30), spacing=dp(8))
+        self.end_roi_label = _label(text="ROI: full image", muted=True, halign="left", valign="middle")
         self.end_roi_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
-        end_roi_clear = _button(text="Clear")
-        end_roi_clear.size_hint_x = 0.25
+        end_roi_clear = _button(text="Clear ROI", size_hint_x=0.28)
         end_roi_clear.bind(on_release=lambda *_: self._clear_roi("end"))
         end_roi_label_row.add_widget(self.end_roi_label)
         end_roi_label_row.add_widget(end_roi_clear)
@@ -357,18 +394,19 @@ class RolePanel(BoxLayout):
         
         def _load_image():
             try:
+                preview_h = dp(220) if Window.width >= dp(520) else dp(180)
                 if phase == "start":
                     self.image_start_path = path
                     self.image_rois["start"] = None
                     self.start_roi_image.source = path
-                    self.start_roi_image.height = dp(200)
+                    self.start_roi_image.height = preview_h
                     self.start_img_label.text = name or "frame 1 selected"
                     self.start_roi_label.text = "ROI: full image"
                 else:
                     self.image_end_path = path
                     self.image_rois["end"] = None
                     self.end_roi_image.source = path
-                    self.end_roi_image.height = dp(200)
+                    self.end_roi_image.height = preview_h
                     self.end_img_label.text = name or "last frame selected"
                     self.end_roi_label.text = "ROI: full image"
             except Exception as e:
@@ -422,67 +460,105 @@ class ColorAnalyzerMobileApp(App):
     def build(self):
         Window.clearcolor = (0.08, 0.1, 0.13, 1)
 
-        root = BoxLayout(orientation="vertical", padding=dp(6), spacing=dp(4))
+        root = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
 
         header = Label(
             text="Offline Color Analyzer",
             size_hint_y=None,
-            height=dp(28),
-            font_size="16sp",
+            height=dp(36),
+            font_size="20sp",
             color=TEXT_COLOR,
         )
         root.add_widget(header)
 
-        # Duration and calibration in one compact area
-        param_scroll = ScrollView(size_hint_y=None, height=dp(90))
-        param_container = BoxLayout(orientation="vertical", spacing=dp(3), size_hint_y=None)
-        param_container.bind(minimum_height=param_container.setter("height"))
+        main_scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
+        content = BoxLayout(orientation="vertical", spacing=dp(10), size_hint_y=None)
+        content.bind(minimum_height=content.setter("height"))
 
-        duration_row = BoxLayout(size_hint_y=None, height=dp(32), spacing=dp(3))
-        duration_row.add_widget(_label(text="Duration h:m:s", size_hint_x=0.25))
+        config_title = _label(
+            text="Analysis Settings",
+            size_hint_y=None,
+            height=dp(24),
+            halign="left",
+            valign="middle",
+        )
+        config_title.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+        content.add_widget(config_title)
+
+        duration_row = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
+        duration_row.add_widget(_label(text="Video Duration", size_hint_x=0.34, halign="left", valign="middle"))
         self.hours_input = _text_input(text="0", input_filter="int")
         self.minutes_input = _text_input(text="0", input_filter="int")
         self.seconds_input = _text_input(text="10", input_filter="int")
+        self.hours_input.hint_text = "hh"
+        self.minutes_input.hint_text = "mm"
+        self.seconds_input.hint_text = "ss"
+        self.hours_input.size_hint_x = 0.12
+        self.minutes_input.size_hint_x = 0.12
+        self.seconds_input.size_hint_x = 0.12
+        duration_sep1 = _label(text=":", size_hint_x=0.04, muted=True)
+        duration_sep2 = _label(text=":", size_hint_x=0.04, muted=True)
         duration_row.add_widget(self.hours_input)
+        duration_row.add_widget(duration_sep1)
         duration_row.add_widget(self.minutes_input)
+        duration_row.add_widget(duration_sep2)
         duration_row.add_widget(self.seconds_input)
-        param_container.add_widget(duration_row)
+        content.add_widget(duration_row)
 
-        calibration_row = BoxLayout(size_hint_y=None, height=dp(32), spacing=dp(3))
-        calibration_row.add_widget(_label(text="Min Target", size_hint_x=0.25))
+        calibration_row = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
+        calibration_row.add_widget(
+            _label(text="Control Min Target", size_hint_x=0.34, halign="left", valign="middle")
+        )
         self.control_min_input = _text_input(text="", input_filter="float")
+        self.control_min_input.hint_text = "e.g. 0.0"
         calibration_row.add_widget(self.control_min_input)
-        calibration_row.add_widget(_label(text="Max Target", size_hint_x=0.25))
+        calibration_row.add_widget(
+            _label(text="Control Max Target", size_hint_x=0.34, halign="left", valign="middle")
+        )
         self.control_max_input = _text_input(text="", input_filter="float")
+        self.control_max_input.hint_text = "e.g. 100.0"
         calibration_row.add_widget(self.control_max_input)
-        param_container.add_widget(calibration_row)
+        content.add_widget(calibration_row)
 
-        param_scroll.add_widget(param_container)
-        root.add_widget(param_scroll)
-
-        # Role panels in scrollable area
         self.role_panels: Dict[str, RolePanel] = {}
-        scroll = ScrollView()
-        role_container = BoxLayout(orientation="vertical", spacing=dp(4), size_hint_y=None)
-        role_container.bind(minimum_height=role_container.setter("height"))
+
+        role_title = _label(
+            text="Inputs By Role",
+            size_hint_y=None,
+            height=dp(24),
+            halign="left",
+            valign="middle",
+        )
+        role_title.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+        content.add_widget(role_title)
 
         for role in ROLE_OPTIONS:
             panel = RolePanel(role=role)
             self.role_panels[role] = panel
-            role_container.add_widget(panel)
+            content.add_widget(panel)
 
-        scroll.add_widget(role_container)
-        root.add_widget(scroll)
+        main_scroll.add_widget(content)
+        root.add_widget(main_scroll)
 
-        # Run button
-        self.run_btn = _button(text="Run Analysis", size_hint_y=None, height=dp(40))
+        action_row = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+        self.run_btn = _button(text="Run Analysis", size_hint_x=0.38)
         self.run_btn.bind(on_release=lambda *_: self.run_analysis())
-        root.add_widget(self.run_btn)
+        self.status_label = _label(
+            text="Ready",
+            muted=True,
+            halign="left",
+            valign="middle",
+            size_hint_x=0.62,
+        )
+        self.status_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+        action_row.add_widget(self.run_btn)
+        action_row.add_widget(self.status_label)
+        root.add_widget(action_row)
 
-        # Output in scrollable area
-        self.output_label = _label(text="Ready", halign="left", valign="top")
+        output_scroll = ScrollView(size_hint_y=None, height=dp(160), do_scroll_x=False)
+        self.output_label = _label(text="Ready", halign="left", valign="top", size_hint_y=None)
+        self.output_label.bind(texture_size=lambda inst, val: setattr(inst, "height", max(dp(160), val[1])))
         self.output_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
-        output_scroll = ScrollView()
         output_scroll.add_widget(self.output_label)
         root.add_widget(output_scroll)
 
@@ -518,6 +594,7 @@ class ColorAnalyzerMobileApp(App):
 
     def run_analysis(self) -> None:
         self.run_btn.disabled = True
+        self.status_label.text = "Running analysis..."
         self.output_label.text = "Running analysis..."
         threading.Thread(target=self._run_analysis_worker, daemon=True).start()
 
@@ -640,6 +717,7 @@ class ColorAnalyzerMobileApp(App):
 
     def _set_output(self, message: str) -> None:
         self.output_label.text = message
+        self.status_label.text = "Complete" if not message.startswith("Error:") else "Error"
         self.run_btn.disabled = False
 
 
