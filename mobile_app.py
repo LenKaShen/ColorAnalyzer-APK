@@ -11,6 +11,7 @@ from kivy.graphics import Color, Line
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
+from kivy.uix.gridlayout import GridLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
@@ -575,12 +576,43 @@ class ColorAnalyzerMobileApp(App):
         action_row.add_widget(self.status_label)
         root.add_widget(action_row)
 
-        output_scroll = ScrollView(size_hint_y=None, height=dp(190), do_scroll_x=False)
-        self.output_label = _label(text="Ready", halign="left", valign="top", size_hint_y=None)
-        self.output_label.bind(texture_size=lambda inst, val: setattr(inst, "height", max(dp(160), val[1])))
-        self.output_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
-        output_scroll.add_widget(self.output_label)
-        root.add_widget(output_scroll)
+        results_section = BoxLayout(orientation="vertical", spacing=dp(6), size_hint_y=None, height=dp(220))
+        results_title = _label(
+            text="Results",
+            size_hint_y=None,
+            height=dp(24),
+            halign="left",
+            valign="middle",
+        )
+        results_title.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+        results_section.add_widget(results_title)
+
+        table_scroll = ScrollView(do_scroll_x=False)
+        self.results_grid = GridLayout(
+            cols=4,
+            size_hint_y=None,
+            row_default_height=dp(34),
+            row_force_default=True,
+            spacing=dp(4),
+            padding=dp(4),
+        )
+        self.results_grid.bind(minimum_height=self.results_grid.setter("height"))
+        table_scroll.add_widget(self.results_grid)
+        results_section.add_widget(table_scroll)
+
+        self.error_label = _label(
+            text="",
+            muted=True,
+            halign="left",
+            valign="top",
+            size_hint_y=None,
+            height=dp(56),
+        )
+        self.error_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+        results_section.add_widget(self.error_label)
+        root.add_widget(results_section)
+
+        self._render_results_table([])
 
         self._request_android_permissions()
         return root
@@ -615,7 +647,8 @@ class ColorAnalyzerMobileApp(App):
     def run_analysis(self) -> None:
         self.run_btn.disabled = True
         self.status_label.text = "Running analysis..."
-        self.output_label.text = "Running analysis..."
+        self.error_label.text = ""
+        self._render_results_table([])
         threading.Thread(target=self._run_analysis_worker, daemon=True).start()
 
     def _parse_duration_sec(self) -> int:
@@ -633,53 +666,45 @@ class ColorAnalyzerMobileApp(App):
             return None
         return float(cleaned)
 
-    def _format_table_cell(self, value: str, width: int) -> str:
-        text = str(value)
-        if len(text) > width:
-            return text[: max(1, width - 1)] + "~"
-        return text.ljust(width)
+    def _table_cell(self, text: str, bold: bool = False) -> Label:
+        cell = Label(
+            text=text,
+            color=TEXT_COLOR if bold else MUTED_TEXT_COLOR,
+            halign="center",
+            valign="middle",
+            size_hint_y=None,
+            height=dp(34),
+            bold=bold,
+        )
+        cell.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+        return cell
 
-    def _format_analysis_output(self, rows) -> str:
-        headers = [
-            ("role", 7),
-            ("dE", 9),
-            ("rate", 11),
-            ("target", 9),
-        ]
-        header_line = " ".join(self._format_table_cell(name, width) for name, width in headers)
-        divider = " ".join("-" * width for _, width in headers)
+    def _render_results_table(self, rows) -> None:
+        self.results_grid.clear_widgets()
 
-        lines = ["Analysis complete", "", header_line, divider]
-        for row in rows:
-            target = row.get("interpolated_target")
-            target_text = "-" if target is None else f"{target:.4f}"
-            lines.append(
-                " ".join(
-                    [
-                        self._format_table_cell(row["role"], 7),
-                        self._format_table_cell(f"{row['delta_e_scalar']:.4f}", 9),
-                        self._format_table_cell(f"{row['rate']:.6f}", 11),
-                        self._format_table_cell(target_text, 9),
-                    ]
-                )
-            )
+        headers = ["Role", "Delta E", "Rate", "Prediction"]
+        for head in headers:
+            self.results_grid.add_widget(self._table_cell(head, bold=True))
 
-            start_roi = row.get("start_roi")
-            end_roi = row.get("end_roi")
-            if start_roi is not None and end_roi is not None:
-                lines.append(f"  roi s:{start_roi} e:{end_roi}")
+        row_map = {row.get("role", ""): row for row in rows}
+        for role in ROLE_OPTIONS:
+            row = row_map.get(role)
+            role_label = role.replace("_", " ").title()
 
-            start_lab = row.get("start_lab_mean")
-            end_lab = row.get("end_lab_mean")
-            if start_lab is not None and end_lab is not None:
-                lines.append(
-                    "  lab s:"
-                    f"({start_lab[0]:.1f},{start_lab[1]:.1f},{start_lab[2]:.1f}) "
-                    "e:"
-                    f"({end_lab[0]:.1f},{end_lab[1]:.1f},{end_lab[2]:.1f})"
-                )
+            if row is None:
+                delta_text = "-"
+                rate_text = "-"
+                pred_text = "-"
+            else:
+                delta_text = f"{row.get('delta_e_scalar', 0.0):.4f}"
+                rate_text = f"{row.get('rate', 0.0):.6f}"
+                pred = row.get("interpolated_target")
+                pred_text = "-" if pred is None else f"{pred:.4f}"
 
-        return "\n".join(lines)
+            self.results_grid.add_widget(self._table_cell(role_label))
+            self.results_grid.add_widget(self._table_cell(delta_text))
+            self.results_grid.add_widget(self._table_cell(rate_text))
+            self.results_grid.add_widget(self._table_cell(pred_text))
 
     def _run_analysis_worker(self) -> None:
         try:
@@ -749,17 +774,27 @@ class ColorAnalyzerMobileApp(App):
                 )
 
             rows = result["rows"]
-            self._finish_run(self._format_analysis_output(rows))
+            self._finish_success(rows)
         except Exception as exc:
             details = traceback.format_exc(limit=4)
-            self._finish_run(f"Error: {exc}\n\n{details}")
+            self._finish_error(f"Error: {exc}\n\n{details}")
 
-    def _finish_run(self, message: str) -> None:
-        Clock.schedule_once(lambda _: self._set_output(message), 0)
+    def _finish_success(self, rows) -> None:
+        Clock.schedule_once(lambda _: self._set_success(rows), 0)
 
-    def _set_output(self, message: str) -> None:
-        self.output_label.text = message
-        self.status_label.text = "Complete" if not message.startswith("Error:") else "Error"
+    def _finish_error(self, message: str) -> None:
+        Clock.schedule_once(lambda _: self._set_error(message), 0)
+
+    def _set_success(self, rows) -> None:
+        self._render_results_table(rows)
+        self.error_label.text = ""
+        self.status_label.text = "Complete"
+        self.run_btn.disabled = False
+
+    def _set_error(self, message: str) -> None:
+        self._render_results_table([])
+        self.error_label.text = message
+        self.status_label.text = "Error"
         self.run_btn.disabled = False
 
 
