@@ -15,6 +15,7 @@ from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.slider import Slider
+from kivy.uix.textinput import TextInput
 
 try:
     from plyer import filechooser
@@ -24,6 +25,7 @@ except Exception:
 TEXT_COLOR = (0.93, 0.95, 0.98, 1)
 MUTED_TEXT_COLOR = (0.68, 0.73, 0.81, 1)
 BTN_BG = (0.21, 0.43, 0.68, 1)
+FIELD_BG = (0.18, 0.2, 0.24, 1)
 
 
 def _label(text: str, muted: bool = False, **kwargs) -> Label:
@@ -40,6 +42,17 @@ def _button(text: str, **kwargs) -> Button:
         color=TEXT_COLOR,
         background_normal="",
         background_color=BTN_BG,
+        **kwargs,
+    )
+
+
+def _text_input(text: str, **kwargs) -> TextInput:
+    return TextInput(
+        text=text,
+        multiline=False,
+        foreground_color=TEXT_COLOR,
+        background_color=FIELD_BG,
+        cursor_color=TEXT_COLOR,
         **kwargs,
     )
 
@@ -253,6 +266,24 @@ class ColorAnalyzerMobileApp(App):
         slider_row.add_widget(self.radius_slider)
         content.add_widget(slider_row)
 
+        dilution_row = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(8))
+        dilution_label = _label(text="Dilution Factor", size_hint_x=0.35, halign="left", valign="middle")
+        dilution_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+        self.dilution_input = _text_input(text="1", input_filter="float")
+        self.dilution_input.hint_text = "e.g. 100"
+        dilution_row.add_widget(dilution_label)
+        dilution_row.add_widget(self.dilution_input)
+        content.add_widget(dilution_row)
+
+        volume_row = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(8))
+        volume_label = _label(text="Plated Volume (mL)", size_hint_x=0.35, halign="left", valign="middle")
+        volume_label.bind(size=lambda inst, _: setattr(inst, "text_size", inst.size))
+        self.volume_input = _text_input(text="1", input_filter="float")
+        self.volume_input.hint_text = "e.g. 1.0"
+        volume_row.add_widget(volume_label)
+        volume_row.add_widget(self.volume_input)
+        content.add_widget(volume_row)
+
         content_scroll.add_widget(content)
         root.add_widget(content_scroll)
 
@@ -323,7 +354,8 @@ class ColorAnalyzerMobileApp(App):
             self.results_grid.add_widget(self._table_cell(col, head=True))
 
         rows = [
-            ("Total CFU/mL", "-", "Awaiting analysis"),
+            ("Corrected CFU/mL", "-", "Awaiting analysis"),
+            ("Raw Plate Signal", "-", "Image-derived (pre-correction)"),
             ("E. coli signal", "-", "Deep Purple / Blue"),
             ("Coliform signal", "-", "Red / Pink"),
             ("Clean zones", "-", "Delta E < 15"),
@@ -339,12 +371,16 @@ class ColorAnalyzerMobileApp(App):
             self.results_grid.add_widget(self._table_cell(col, head=True))
 
         total_cfu = float(result.get("total_cfu_ml", 0.0))
+        adjusted_cfu = float(result.get("adjusted_cfu_ml", total_cfu))
         ecoli_cells = int(result.get("ecoli_cells", 0))
         coliform_cells = int(result.get("coliform_cells", 0))
         clean_cells = int(result.get("clean_cells", 0))
+        dilution_factor = float(result.get("dilution_factor", 1.0))
+        plated_volume_ml = float(result.get("plated_volume_ml", 1.0))
 
         rows = [
-            ("Total CFU/mL", f"{total_cfu:.2f}", "Estimated concentration"),
+            ("Corrected CFU/mL", f"{adjusted_cfu:.2f}", "(Raw x Dilution) / Volume"),
+            ("Raw Plate Signal", f"{total_cfu:.2f}", "Before dilution/volume correction"),
             ("E. coli signal", str(ecoli_cells), "Fecal Contamination (High Risk)"),
             ("Coliform signal", str(coliform_cells), "Environmental Bacteria (General)"),
             ("Clean zones", str(clean_cells), "Delta E < 15 (Clean / Sterile)"),
@@ -358,7 +394,7 @@ class ColorAnalyzerMobileApp(App):
         mesh_rgb = result.get("mesh_white_rgb", (0, 0, 0))
         self.note_label.text = (
             "Internal baseline (mesh white RGB): "
-            f"{mesh_rgb}. Spatial model active: DeltaE thresholding + grid area summation."
+            f"{mesh_rgb}. Correction: dilution={dilution_factor:g}, volume={plated_volume_ml:g} mL."
         )
 
     def _request_android_permissions(self) -> None:
@@ -432,6 +468,16 @@ class ColorAnalyzerMobileApp(App):
             self.status_label.text = "Pick an image first"
             return
 
+        try:
+            dilution_factor = float((self.dilution_input.text or "1").strip())
+            plated_volume_ml = float((self.volume_input.text or "1").strip())
+            if dilution_factor <= 0 or plated_volume_ml <= 0:
+                raise ValueError("Dilution factor and plated volume must be > 0")
+        except ValueError as exc:
+            self.status_label.text = "Input error"
+            self.note_label.text = str(exc)
+            return
+
         # Read UI state on main thread before worker starts.
         manual_circle = self.align_image.get_circle_pixels()
         image_path = self.selected_image_path
@@ -441,7 +487,7 @@ class ColorAnalyzerMobileApp(App):
         self.note_label.text = ""
         threading.Thread(
             target=self._run_analysis_worker,
-            args=(image_path, manual_circle),
+            args=(image_path, manual_circle, dilution_factor, plated_volume_ml),
             daemon=True,
         ).start()
 
@@ -449,11 +495,18 @@ class ColorAnalyzerMobileApp(App):
         self,
         image_path: str,
         manual_circle: Optional[Tuple[int, int, int]],
+        dilution_factor: float,
+        plated_volume_ml: float,
     ) -> None:
         try:
             from Analyzer import analyze_microbe_upload
 
-            result = analyze_microbe_upload(image_path, manual_circle=manual_circle)
+            result = analyze_microbe_upload(
+                image_path,
+                manual_circle=manual_circle,
+                dilution_factor=dilution_factor,
+                plated_volume_ml=plated_volume_ml,
+            )
             Clock.schedule_once(lambda _, res=result: self._set_success(res), 0)
         except Exception as exc:
             details = traceback.format_exc(limit=4)

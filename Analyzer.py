@@ -290,7 +290,19 @@ def _confluent_cfu_from_lightness(
     return float(np.clip(full_scale_cfu / (GRID_SIZE_DEFAULT * GRID_SIZE_DEFAULT), 0.0, square_max_cfu))
 
 
-def analyze_microbe_upload(image_path: str, manual_circle: Optional[Tuple[int, int, int]] = None) -> Dict[str, object]:
+def analyze_microbe_upload(
+    image_path: str,
+    manual_circle: Optional[Tuple[int, int, int]] = None,
+    dilution_factor: float = 1.0,
+    plated_volume_ml: float = 1.0,
+) -> Dict[str, object]:
+    dilution_factor = float(dilution_factor)
+    plated_volume_ml = float(plated_volume_ml)
+    if dilution_factor <= 0:
+        raise ValueError("Dilution factor must be > 0")
+    if plated_volume_ml <= 0:
+        raise ValueError("Plated volume (mL) must be > 0")
+
     image_data = _load_rgb_image(image_path)
     processed_img = perspective_correction(image_data, manual_circle=manual_circle)
 
@@ -364,9 +376,13 @@ def analyze_microbe_upload(image_path: str, manual_circle: Optional[Tuple[int, i
         )
 
     total_cfu = float(sum(cell["cfu"] for cell in grid_results))
+    adjusted_cfu_ml = (total_cfu * dilution_factor) / plated_volume_ml
 
     return {
         "total_cfu_ml": total_cfu,
+        "adjusted_cfu_ml": float(adjusted_cfu_ml),
+        "dilution_factor": dilution_factor,
+        "plated_volume_ml": plated_volume_ml,
         "grid_size": grid_size,
         "noise_floor_de": NOISE_FLOOR_DE,
         "purple_area_fraction": (float(total_signal_pixels) / float(max(total_pixels, 1))),
