@@ -10,7 +10,7 @@ def _startup_crash_log_path() -> str:
 def _write_startup_crash(exc: BaseException) -> None:
     try:
         with open(_startup_crash_log_path(), "w", encoding="utf-8") as handle:
-            handle.write("ColorAnalyzer startup crash\n\n")
+            handle.write("MicrobeScanner startup crash\n\n")
             traceback.print_exception(type(exc), exc, exc.__traceback__, file=handle)
     except Exception:
         pass
@@ -20,7 +20,7 @@ def _install_global_excepthook() -> None:
     def _hook(exc_type, exc_value, exc_traceback):
         try:
             with open(_startup_crash_log_path(), "w", encoding="utf-8") as handle:
-                handle.write("ColorAnalyzer unhandled exception\n\n")
+                handle.write("MicrobeScanner unhandled exception\n\n")
                 traceback.print_exception(exc_type, exc_value, exc_traceback, file=handle)
         except Exception:
             pass
