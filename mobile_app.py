@@ -432,21 +432,33 @@ class ColorAnalyzerMobileApp(App):
             self.status_label.text = "Pick an image first"
             return
 
+        # Read UI state on main thread before worker starts.
+        manual_circle = self.align_image.get_circle_pixels()
+        image_path = self.selected_image_path
+
         self.analyze_button.disabled = True
         self.status_label.text = "Analyzing..."
         self.note_label.text = ""
-        threading.Thread(target=self._run_analysis_worker, daemon=True).start()
+        threading.Thread(
+            target=self._run_analysis_worker,
+            args=(image_path, manual_circle),
+            daemon=True,
+        ).start()
 
-    def _run_analysis_worker(self) -> None:
+    def _run_analysis_worker(
+        self,
+        image_path: str,
+        manual_circle: Optional[Tuple[int, int, int]],
+    ) -> None:
         try:
             from Analyzer import analyze_microbe_upload
 
-            manual_circle = self.align_image.get_circle_pixels()
-            result = analyze_microbe_upload(self.selected_image_path, manual_circle=manual_circle)
-            Clock.schedule_once(lambda _: self._set_success(result), 0)
+            result = analyze_microbe_upload(image_path, manual_circle=manual_circle)
+            Clock.schedule_once(lambda _, res=result: self._set_success(res), 0)
         except Exception as exc:
             details = traceback.format_exc(limit=4)
-            Clock.schedule_once(lambda _: self._set_error(f"{exc}\n\n{details}"), 0)
+            error_message = f"{exc}\n\n{details}"
+            Clock.schedule_once(lambda _, msg=error_message: self._set_error(msg), 0)
 
     def _set_success(self, result: Dict[str, object]) -> None:
         self._render_results(result)
