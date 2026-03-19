@@ -155,7 +155,8 @@ def _resize_1000(img: np.ndarray) -> np.ndarray:
     from PIL import Image
 
     pil = Image.fromarray(img.astype(np.uint8), mode="RGB")
-    return np.array(pil.resize((1000, 1000), Image.Resampling.BILINEAR), dtype=np.uint8)
+    resample = getattr(getattr(Image, "Resampling", Image), "BILINEAR", Image.BILINEAR)
+    return np.array(pil.resize((1000, 1000), resample), dtype=np.uint8)
 
 
 def perspective_correction(image_data: np.ndarray, manual_circle: Optional[Tuple[int, int, int]] = None) -> np.ndarray:
