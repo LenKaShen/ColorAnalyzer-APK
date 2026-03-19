@@ -1,33 +1,66 @@
 name: Build Android APK
 
-on: [push]
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache buildozer global (SDK/NDK/ANT)
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-global-${{ hashFiles('buildozer.spec', 'requirements.txt') }}-microbe
+          restore-keys: buildozer-global-
+
+      - name: Cache buildozer local (compiled recipes)
+        uses: actions/cache@v4
+        with:
+          path: .buildozer
+          key: buildozer-local-${{ hashFiles('buildozer.spec', 'requirements.txt') }}-microbe
+          restore-keys: buildozer-local-
+
       - uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: temurin
-      - name: Build APK (Gradle or Buildozer)
+
+      - name: Install system dependencies
         run: |
-          if [ -f "gradlew" ]; then
-            chmod +x gradlew
-            ./gradlew assembleDebug
-          else
-            sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends \
-              git zip unzip python3-pip python3-venv \
-              autoconf libtool pkg-config zlib1g-dev libncurses5-dev \
-              libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev ccache
-            pip3 install --user --upgrade "cython<3" buildozer
-            ~/.local/bin/buildozer android debug
-          fi
-      - uses: actions/upload-artifact@v4
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            git zip unzip python3-pip python3-venv \
+            autoconf libtool pkg-config zlib1g-dev libncurses5-dev \
+            libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev \
+            ccache
+
+      - name: Install buildozer + cython
+        run: pip3 install --user --upgrade "cython<3" buildozer
+
+      - name: Build APK
+        env:
+          MAKEFLAGS: "-j$(nproc)"
+          JAVA_HOME: ${{ env.JAVA_HOME_17_X64 }}
+        run: ~/.local/bin/buildozer android debug 2>&1 | tee build.log
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
           name: MicrobeScanner
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            bin/*.apk
+          path: bin/*.apk
+          if-no-files-found: error
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
