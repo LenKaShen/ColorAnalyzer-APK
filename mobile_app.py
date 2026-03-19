@@ -355,6 +355,8 @@ class ColorAnalyzerMobileApp(App):
 
         rows = [
             ("Corrected CFU/mL", "-", "Awaiting analysis"),
+            ("95% CI", "-", "Uncertainty interval"),
+            ("Grid CV%", "-", "Intra-image variability"),
             ("Raw Plate Signal", "-", "Image-derived (pre-correction)"),
             ("E. coli signal", "-", "Deep Purple / Blue"),
             ("Coliform signal", "-", "Red / Pink"),
@@ -372,14 +374,21 @@ class ColorAnalyzerMobileApp(App):
 
         total_cfu = float(result.get("total_cfu_ml", 0.0))
         adjusted_cfu = float(result.get("adjusted_cfu_ml", total_cfu))
+        ci_low = float(result.get("adjusted_cfu_ci_low", adjusted_cfu))
+        ci_high = float(result.get("adjusted_cfu_ci_high", adjusted_cfu))
+        cv_percent = float(result.get("adjusted_cfu_cv_percent", 0.0))
         ecoli_cells = int(result.get("ecoli_cells", 0))
         coliform_cells = int(result.get("coliform_cells", 0))
         clean_cells = int(result.get("clean_cells", 0))
         dilution_factor = float(result.get("dilution_factor", 1.0))
         plated_volume_ml = float(result.get("plated_volume_ml", 1.0))
+        quality = result.get("quality", {})
+        quality_warnings = quality.get("warnings", []) if isinstance(quality, dict) else []
 
         rows = [
             ("Corrected CFU/mL", f"{adjusted_cfu:.2f}", "(Raw x Dilution) / Volume"),
+            ("95% CI", f"{ci_low:.2f} to {ci_high:.2f}", "Bootstrap (grid-based)"),
+            ("Grid CV%", f"{cv_percent:.1f}%", "Lower is more stable"),
             ("Raw Plate Signal", f"{total_cfu:.2f}", "Before dilution/volume correction"),
             ("E. coli signal", str(ecoli_cells), "Fecal Contamination (High Risk)"),
             ("Coliform signal", str(coliform_cells), "Environmental Bacteria (General)"),
@@ -392,10 +401,13 @@ class ColorAnalyzerMobileApp(App):
             self.results_grid.add_widget(self._table_cell(note))
 
         mesh_rgb = result.get("mesh_white_rgb", (0, 0, 0))
-        self.note_label.text = (
+        note = (
             "Internal baseline (mesh white RGB): "
             f"{mesh_rgb}. Correction: dilution={dilution_factor:g}, volume={plated_volume_ml:g} mL."
         )
+        if quality_warnings:
+            note += "\nQC: " + " | ".join(str(w) for w in quality_warnings)
+        self.note_label.text = note
 
     def _request_android_permissions(self) -> None:
         try:
